@@ -168,7 +168,10 @@ def depth_to_pointcloud_centroid(depth_image: np.array, intrinsic_matrix: np.arr
 
     # Get image parameters
     height, width = depth_image.shape
-    
+    if depth_image.dtype == np.uint16:
+        scale = 1000.0 # Convert from mm to meters
+    elif depth_image.dtype == np.float32:
+        scale = 1.0 # Already in meters
 
     # Check if all corners are within image bounds
     # corners has shape (1, 4, 2)
@@ -191,7 +194,7 @@ def depth_to_pointcloud_centroid(depth_image: np.array, intrinsic_matrix: np.arr
     if len(depth_values) == 0:
         raise ValueError("No valid depth values found within the polygon.")
     # Calculate the 3D coordinates of the centroid
-    centroid_z = np.mean(depth_values) / 1000.0  # Convert from mm to meters
+    centroid_z = np.mean(depth_values) / scale  
 
     # Convert the 2D centroid to 3D coordinates using the intrinsic matrix
     centroid_x = (np.mean(corners_indices[:, 0]) - intrinsic_matrix[0, 2]) * centroid_z / intrinsic_matrix[0, 0]
@@ -202,7 +205,7 @@ def depth_to_pointcloud_centroid(depth_image: np.array, intrinsic_matrix: np.arr
     corner_points = []
     for idx in corners_indices:
         x,y = idx
-        z = depth_image[y, x] / 1000.0
+        z = depth_image[y, x] / scale
         x_3d = (x - intrinsic_matrix[0, 2]) * z / intrinsic_matrix[0, 0]
         y_3d = (y - intrinsic_matrix[1, 2]) * z / intrinsic_matrix[1, 1]
         corner_points.append([x_3d, y_3d, z])
