@@ -134,5 +134,5 @@ def generate_launch_description():
 
         # Nodes
         aruco_node, 
-        # rviz2_node
+        rviz2_node
     ])
