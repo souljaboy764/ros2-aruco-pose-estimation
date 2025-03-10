@@ -4,13 +4,10 @@
 # https://github.com/GSNCodes/ArUCo-Markers-Pose-Estimation-Generation-Python/tree/main
 
 # Python imports
+from typing import List, Tuple
 import numpy as np
 import cv2
-import tf_transformations
 from scipy.spatial.transform import Rotation as R
-
-# ROS2 imports
-from rclpy.impl import rcutils_logger
 
 # ROS2 message imports
 from geometry_msgs.msg import Pose
@@ -20,10 +17,12 @@ from aruco_interfaces.msg import ArucoMarkers
 # utils import python code
 from aruco_pose_estimation.utils import aruco_display
 
+import rospy
+
 
 def pose_estimation(rgb_frame: np.array, depth_frame: np.array, aruco_detector: cv2.aruco.ArucoDetector, marker_size: float,
                     matrix_coefficients: np.array, distortion_coefficients: np.array,
-                    pose_array: PoseArray, markers: ArucoMarkers) -> list[np.array, PoseArray, ArucoMarkers]:
+                    pose_array: PoseArray, markers: ArucoMarkers):
     '''
     rgb_frame - Frame from the RGB camera stream
     depth_frame - Depth frame from the depth camera stream
@@ -46,12 +45,11 @@ def pose_estimation(rgb_frame: np.array, depth_frame: np.array, aruco_detector: 
     corners, marker_ids, rejected = aruco_detector.detectMarkers(image=rgb_frame)
 
     frame_processed = rgb_frame
-    logger = rcutils_logger.RcutilsLogger(name="aruco_node")
 
     # If markers are detected
     if len(corners) > 0:
 
-        logger.info("Detected {} markers.".format(len(corners)))
+        rospy.loginfo("Detected {} markers.".format(len(corners)))
 
         for i, marker_id in enumerate(marker_ids):
             # Estimate pose of each marker and return the values rvec and tvec
@@ -84,10 +82,10 @@ def pose_estimation(rgb_frame: np.array, depth_frame: np.array, aruco_detector: 
                                                         corners=corners[i])
 
                 # log comparison between depthcloud centroid and tvec estimated positions
-                logger.info(f"depthcloud centroid = {centroid}")
-                logger.info(f"depthcloud rotation = {quat_pc[0]} {quat_pc[1]} {quat_pc[2]} {quat_pc[3]}")
-                logger.info(f"tvec = {tvec[0]} {tvec[1]} {tvec[2]}")
-                logger.info(f"quat = {quat[0]} {quat[1]} {quat[2]} {quat[3]}")
+                rospy.loginfo(f"depthcloud centroid = {centroid}")
+                rospy.loginfo(f"depthcloud rotation = {quat_pc[0]} {quat_pc[1]} {quat_pc[2]} {quat_pc[3]}")
+                rospy.loginfo(f"tvec = {tvec[0]} {tvec[1]} {tvec[2]}")
+                rospy.loginfo(f"quat = {quat[0]} {quat[1]} {quat[2]} {quat[3]}")
             
                 # use computed centroid from depthcloud as estimated pose
                 pose = Pose()
@@ -118,7 +116,7 @@ def pose_estimation(rgb_frame: np.array, depth_frame: np.array, aruco_detector: 
     return frame_processed, pose_array, markers
 
 
-def my_estimatePoseSingleMarkers(corners, marker_size, camera_matrix, distortion) -> tuple[np.array, np.array, np.array]:
+def my_estimatePoseSingleMarkers(corners, marker_size, camera_matrix, distortion) -> Tuple[np.array, np.array, np.array]:
     '''
     This will estimate the rvec and tvec for each of the marker corners detected by:
        corners, ids, rejectedImgPoints = detector.detectMarkers(image)
@@ -141,11 +139,11 @@ def my_estimatePoseSingleMarkers(corners, marker_size, camera_matrix, distortion
     tvec = tvec.reshape(3, 1)
        
     rot, jacobian = cv2.Rodrigues(rvec)
-    rot_matrix = np.eye(4, dtype=np.float32)
-    rot_matrix[0:3, 0:3] = rot
+    # rot_matrix = np.eye(4, dtype=np.float32)
+    # rot_matrix[0:3, 0:3] = rot
 
     # convert rotation matrix to quaternion
-    quaternion = tf_transformations.quaternion_from_matrix(rot_matrix)
+    quaternion = R.from_matrix(rot).as_quat()
     norm_quat = np.linalg.norm(quaternion)
     quaternion = quaternion / norm_quat
 

@@ -1,0 +1,31 @@
+<launch>
+    <!-- Parameters -->
+    <arg name="marker_size" default="0.05" />
+    <arg name="aruco_dictionary_id" default="DICT_6X6_250" />
+    <arg name="image_topic" default="/camera/color/image_raw" />
+    <arg name="use_depth_input" default="false" />
+    <arg name="depth_image_topic" default="/camera/aligned_depth_to_color/image_raw" />
+    <arg name="camera_info_topic" default="/camera/color/camera_info" />
+    <arg name="camera_frame" default="camera_link" />
+    <arg name="detected_markers_topic" default="/aruco_detect/detected_markers" />
+    <arg name="markers_visualization_topic" default="/aruco_detect/markers_visualization" />
+    <arg name="output_image_topic" default="/aruco_detect/output_image" />
+
+    <!-- Aruco Node -->
+    <node pkg="aruco_pose_estimation" type="aruco_node.py" name="aruco_node" output="screen">
+        <param name="marker_size" value="$(arg marker_size)" />
+        <param name="aruco_dictionary_id" value="$(arg aruco_dictionary_id)" />
+        <param name="image_topic" value="$(arg image_topic)" />
+        <param name="use_depth_input" value="$(arg use_depth_input)" />
+        <param name="depth_image_topic" value="$(arg depth_image_topic)" />
+        <param name="camera_info_topic" value="$(arg camera_info_topic)" />
+        <param name="camera_frame" value="$(arg camera_frame)" />
+        <param name="detected_markers_topic" value="$(arg detected_markers_topic)" />
+        <param name="markers_visualization_topic" value="$(arg markers_visualization_topic)" />
+        <param name="output_image_topic" value="$(arg output_image_topic)" />
+    </node>
+
+    <!-- RViz Node -->
+    <node pkg="rviz" type="rviz" name="rviz" />
+    <!-- args="-d $(find aruco_pose_estimation)/rviz/cam_detect.rviz" /> -->
+</launch>

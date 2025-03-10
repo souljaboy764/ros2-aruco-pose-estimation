@@ -35,12 +35,14 @@ Version: 2024-01-29
 
 """
 
-# ROS2 imports
-import rclpy
-import rclpy.node
-from rclpy.qos import qos_profile_sensor_data
+# ROS1 imports
+import rospy
 from cv_bridge import CvBridge
 import message_filters
+from sensor_msgs.msg import CameraInfo
+from sensor_msgs.msg import Image
+from geometry_msgs.msg import PoseArray
+from aruco_interfaces.msg import ArucoMarkers
 
 # Python imports
 import numpy as np
@@ -50,18 +52,9 @@ import cv2
 from aruco_pose_estimation.utils import ARUCO_DICT
 from aruco_pose_estimation.pose_estimation import pose_estimation
 
-# ROS2 message imports
-from sensor_msgs.msg import CameraInfo
-from sensor_msgs.msg import Image
-from geometry_msgs.msg import PoseArray
-from aruco_interfaces.msg import ArucoMarkers
-from rcl_interfaces.msg import ParameterDescriptor, ParameterType
 
-
-class ArucoNode(rclpy.node.Node):
+class ArucoNode():
     def __init__(self):
-        super().__init__("aruco_node")
-
         self.initialize_parameters()
 
         # Make sure we have a valid dictionary id:
@@ -71,28 +64,24 @@ class ArucoNode(rclpy.node.Node):
             if dictionary_id not in ARUCO_DICT.values():
                 raise AttributeError
         except AttributeError:
-            self.get_logger().error(
+            rospy.logerr(
                 "bad aruco_dictionary_id: {}".format(self.dictionary_id_name)
             )
             options = "\n".join([s for s in ARUCO_DICT])
-            self.get_logger().error("valid options: {}".format(options))
+            rospy.logerr("valid options: {}".format(options))
 
         # Set up subscriptions to the camera info and camera image topics
 
         # camera info topic for the camera calibration parameters
-        self.info_sub = self.create_subscription(
-            CameraInfo, self.info_topic, self.info_callback, qos_profile_sensor_data
-        )
+        self.info_sub = rospy.Subscriber(self.info_topic, CameraInfo, self.info_callback, queue_size=10)
 
         # select the type of input to use for the pose estimation
         if (bool(self.use_depth_input)):
             # use both rgb and depth image topics for the pose estimation
 
             # create a message filter to synchronize the image and depth image topics
-            self.image_sub = message_filters.Subscriber(self, Image, self.image_topic,
-                                                        qos_profile=qos_profile_sensor_data)
-            self.depth_image_sub = message_filters.Subscriber(self, Image, self.depth_image_topic,
-                                                              qos_profile=qos_profile_sensor_data)
+            self.image_sub = message_filters.Subscriber(self.image_topic, Image)
+            self.depth_image_sub = message_filters.Subscriber(self.depth_image_topic, Image)
 
             # create synchronizer between the 2 topics using message filters and approximate time policy
             # slop is the maximum time difference between messages that are considered synchronized
@@ -104,14 +93,14 @@ class ArucoNode(rclpy.node.Node):
             # rely only on the rgb image topic for the pose estimation
 
             # create a subscription to the image topic
-            self.image_sub = self.create_subscription(
-                Image, self.image_topic, self.image_callback, qos_profile_sensor_data
+            self.image_sub = rospy.Subscriber(
+                self.image_topic, Image, self.image_callback, queue_size=10
             )
 
         # Set up publishers
-        self.poses_pub = self.create_publisher(PoseArray, self.markers_visualization_topic, 10)
-        self.markers_pub = self.create_publisher(ArucoMarkers, self.detected_markers_topic, 10)
-        self.image_pub = self.create_publisher(Image, self.output_image_topic, 10)
+        self.poses_pub = rospy. Publisher(self.markers_visualization_topic, PoseArray, queue_size=10)
+        self.markers_pub = rospy.Publisher(self.detected_markers_topic, ArucoMarkers, queue_size=10)
+        self.image_pub = rospy.Publisher(self.output_image_topic, Image, queue_size=10)
 
         # Set up fields for camera parameters
         self.info_msg = None
@@ -135,17 +124,17 @@ class ArucoNode(rclpy.node.Node):
         self.intrinsic_mat = np.reshape(np.array(self.info_msg.k), (3, 3))
         self.distortion = np.array(self.info_msg.d)
 
-        self.get_logger().info("Camera info received.")
-        self.get_logger().info("Intrinsic matrix: {}".format(self.intrinsic_mat))
-        self.get_logger().info("Distortion coefficients: {}".format(self.distortion))
-        self.get_logger().info("Camera frame: {}x{}".format(self.info_msg.width, self.info_msg.height))
+        rospy.loginfo("Camera info received.")
+        rospy.loginfo("Intrinsic matrix: {}".format(self.intrinsic_mat))
+        rospy.loginfo("Distortion coefficients: {}".format(self.distortion))
+        rospy.loginfo("Camera frame: {}x{}".format(self.info_msg.width, self.info_msg.height))
 
         # Assume that camera parameters will remain the same...
-        self.destroy_subscription(self.info_sub)
+        self.info_sub = None
 
     def image_callback(self, img_msg: Image):
         if self.info_msg is None:
-            self.get_logger().warn("No camera info has been received!")
+            rospy.logwarn("No camera info has been received!")
             return
 
         # convert the image messages to cv2 format
@@ -191,7 +180,7 @@ class ArucoNode(rclpy.node.Node):
 
     def depth_image_callback(self, depth_msg: Image):
         if self.info_msg is None:
-            self.get_logger().warn("No camera info has been received!")
+            rospy.logwarn("No camera info has been received!")
             return
 
     def rgb_depth_sync_callback(self, rgb_msg: Image, depth_msg: Image):
@@ -232,153 +221,30 @@ class ArucoNode(rclpy.node.Node):
 
     def initialize_parameters(self):
         # Declare and read parameters from aruco_params.yaml
-        self.declare_parameter(
-            name="marker_size",
-            value=0.0625,
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_DOUBLE,
-                description="Size of the markers in meters.",
-            ),
-        )
-
-        self.declare_parameter(
-            name="aruco_dictionary_id",
-            value="DICT_5X5_250",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Dictionary that was used to generate markers.",
-            ),
-        )
-
-        self.declare_parameter(
-            name="use_depth_input",
-            value=True,
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_BOOL,
-                description="Use depth camera input for pose estimation instead of RGB image",
-            ),
-        )
-
-        self.declare_parameter(
-            name="image_topic",
-            value="/camera/image_raw",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Image topic to subscribe to.",
-            ),
-        )
-
-        self.declare_parameter(
-            name="depth_image_topic",
-            value="/camera/depth/image_raw",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Depth camera topic to subscribe to.",
-            ),
-        )
-
-        self.declare_parameter(
-            name="camera_info_topic",
-            value="/camera/camera_info",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Camera info topic to subscribe to.",
-            ),
-        )
-
-        self.declare_parameter(
-            name="camera_frame",
-            value="",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Camera optical frame to use.",
-            ),
-        )
-
-        self.declare_parameter(
-            name="detected_markers_topic",
-            value="/aruco_markers",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Topic to publish detected markers as array of marker ids and poses",
-            ),
-        )
-
-        self.declare_parameter(
-            name="markers_visualization_topic",
-            value="/aruco_poses",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Topic to publish markers as pose array",
-            ),
-        )
-
-        self.declare_parameter(
-            name="output_image_topic",
-            value="/aruco_image",
-            descriptor=ParameterDescriptor(
-                type=ParameterType.PARAMETER_STRING,
-                description="Topic to publish annotated images with markers drawn on them",
-            ),
-        )
-
-        # read parameters from aruco_params.yaml and store them
-        self.marker_size = (
-            self.get_parameter("marker_size").get_parameter_value().double_value
-        )
-        self.get_logger().info(f"Marker size: {self.marker_size}")
-
-        self.dictionary_id_name = (
-            self.get_parameter("aruco_dictionary_id").get_parameter_value().string_value
-        )
-        self.get_logger().info(f"Marker type: {self.dictionary_id_name}")
-
-        self.use_depth_input = (
-            self.get_parameter("use_depth_input").get_parameter_value().bool_value
-        )
-        self.get_logger().info(f"Use depth input: {self.use_depth_input}")
-
-        self.image_topic = (
-            self.get_parameter("image_topic").get_parameter_value().string_value
-        )
-        self.get_logger().info(f"Input image topic: {self.image_topic}")
-
-        self.depth_image_topic = (
-            self.get_parameter("depth_image_topic").get_parameter_value().string_value
-        )
-        self.get_logger().info(f"Input depth image topic: {self.depth_image_topic}")
-
-        self.info_topic = (
-            self.get_parameter("camera_info_topic").get_parameter_value().string_value
-        )
-        self.get_logger().info(f"Image camera info topic: {self.info_topic}")
-
-        self.camera_frame = (
-            self.get_parameter("camera_frame").get_parameter_value().string_value
-        )
-        self.get_logger().info(f"Camera frame: {self.camera_frame}")
-
-        # Output topics
-        self.detected_markers_topic = (
-            self.get_parameter("detected_markers_topic").get_parameter_value().string_value
-        )
-
-        self.markers_visualization_topic = (
-            self.get_parameter("markers_visualization_topic").get_parameter_value().string_value
-        )
-
-        self.output_image_topic = (
-            self.get_parameter("output_image_topic").get_parameter_value().string_value
-        )
+        self.marker_size = rospy.get_param("~marker_size", 0.0625)
+        rospy.loginfo(f"Marker size: {self.marker_size}")
+        self.dictionary_id_name = rospy.get_param("~aruco_dictionary_id", "DICT_5X5_250")
+        rospy.loginfo(f"Marker type: {self.dictionary_id_name}")
+        self.use_depth_input = rospy.get_param("~use_depth_input", True)
+        rospy.loginfo(f"Use depth input: {self.use_depth_input}")
+        self.image_topic = rospy.get_param("~image_topic", "/camera/image_raw")
+        rospy.loginfo(f"Input image topic: {self.image_topic}")
+        self.depth_image_topic = rospy.get_param("~depth_image_topic", "/camera/depth/image_raw")
+        rospy.loginfo(f"Input depth image topic: {self.depth_image_topic}")
+        self.info_topic = rospy.get_param("~camera_info_topic", "/camera/camera_info")
+        rospy.loginfo(f"Image camera info topic: {self.info_topic}")
+        self.camera_frame = rospy.get_param("~camera_frame", "")
+        rospy.loginfo(f"Camera frame: {self.camera_frame}")
+        self.detected_markers_topic = rospy.get_param("~detected_markers_topic", "/aruco_markers")
+        self.markers_visualization_topic = rospy.get_param("~markers_visualization_topic", "/aruco_poses")
+        self.output_image_topic = rospy.get_param("~output_image_topic", "/aruco_image")
 
 
 def main():
-    rclpy.init()
-    node = ArucoNode()
-    rclpy.spin(node)
-
-    node.destroy_node()
-    rclpy.shutdown()
+    rospy.init_node('aruco_node', anonymous=True)
+    aruco_node = ArucoNode()
+    rospy.spin()
+    rospy.shutdown()
 
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 import cv2
-from rclpy.impl import rcutils_logger
+import rospy
 
 ARUCO_DICT = {
     "DICT_4X4_50": cv2.aruco.DICT_4X4_50,
@@ -65,8 +65,7 @@ def aruco_display(corners, ids, image):
             cv2.putText(image, str(markerID), (topLeft[0], topLeft[1] - 10), cv2.FONT_HERSHEY_SIMPLEX,
                         0.5, (0, 255, 0), 2)
 
-        logger = rcutils_logger.RcutilsLogger(name="aruco_node")
-        logger.debug("[Inference] ArUco markers IDs: {}".format(ids))
+        rospy.logdebug("[Inference] ArUco markers IDs: {}".format(ids))
 
     return image
 
