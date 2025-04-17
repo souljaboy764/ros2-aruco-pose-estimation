@@ -104,7 +104,7 @@ def generate_launch_description():
             "output_image_topic": LaunchConfiguration('output_image_topic'),
         }],
         output='screen',
-        emulate_tty=True
+        respawn=True
     )
 
     rviz_file = PathJoinSubstitution([
